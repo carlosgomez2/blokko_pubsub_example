@@ -1,38 +1,58 @@
+# Description: Código de ejemplo para publicar y suscribirse a un tema de Google Cloud Pub/Sub.
+# Doc: https://pypi.org/project/google-cloud-pubsub/
+# Credentials: https://console.cloud.google.com/apis/credentials?authuser=1&project=blokkodev
+
 import os
-import pdb
+import json
+
 
 from flask import Flask, request, jsonify
-from google.cloud import pubsub_v1  # Importa la librería de Google Cloud Pub/Sub.
+from google.cloud import pubsub_v1
+from google.auth import jwt
 
 app = Flask(__name__)
 
 # Configura las credenciales de Google Cloud Pub/Sub.
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "credentials.json"  # Reemplaza con la ruta real de tus credenciales.
-project_id = 'blokkodev'  # blokkodev es el ID del proyecto de Google Cloud.
-topic_name = 'blokkoMQTest'  # Nombre del tema.
-subscription_name = 'testQueue'  # Nombre de la suscripción.
+# Reemplaza con la ruta real de tus credenciales.
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "credentials.json"
 
-publisher = pubsub_v1.PublisherClient()  # Crea un cliente de publicación.
-topic_path = publisher.topic_path(project_id, topic_name)  # Crea la ruta del tema.
+project_id = 'blokkodev'
+topic_name = 'blokkoMQTest'
+subscription_name = 'testQueue'
 
-subscriber = pubsub_v1.SubscriberClient()  # Crea un cliente de suscripción.
-subscription_path = subscriber.subscription_path(project_id, subscription_name)  # Crea la ruta de la suscripción.
+# Carga las credenciales JSON desde el archivo y configura la audiencia.
+service_account_info = json.load(open("credentials.json"))
+
+# Configura las credenciales para el Subscriber.
+subscriber_audience = "https://pubsub.googleapis.com/google.pubsub.v1.Subscriber"
+subscriber_credentials = jwt.Credentials.from_service_account_info(service_account_info, audience=subscriber_audience)
+
+# Configura las credenciales para el Publisher.
+publisher_audience = "https://pubsub.googleapis.com/google.pubsub.v1.Publisher"
+publisher_credentials = jwt.Credentials.from_service_account_info(service_account_info, audience=publisher_audience)
+
+# Configura el cliente del editor con las credenciales del Publisher.
+publisher = pubsub_v1.PublisherClient(credentials=publisher_credentials)
+topic_path = publisher.topic_path(project_id, topic_name)
+
+# Configura el cliente del suscriptor con las credenciales del Subscriber.
+subscriber = pubsub_v1.SubscriberClient(credentials=subscriber_credentials)
+subscription_path = subscriber.subscription_path(project_id, subscription_name)
+
 
 # Ruta para publicar un mensaje.
 
 
 @app.route('/publish', methods=['POST'])
 def publish_message():
-    # message_data = request.json.get('message')
     message_data = "Hello friend!"  # Mensaje a publicar.
 
     # Publica el mensaje en el tema 'blokkoMQTest'.
     pub = publisher.publish(topic_path, data=message_data.encode('utf-8'))
-    # pdb.set_trace() # Para debuggear en la consola
     pub.result()
 
-    # Retorna un mensaje de éxito donde dice que se encolo el mensaje.
-    return jsonify({'message': 'Mensaje publicado con éxito'})
+    # Retorna un mensaje de éxito donde dice que se encoló el mensaje.
+    return jsonify({'message': 'Mensaje publicado con éxito', 'result': pub.result()})
 
 
 # Función para manejar los mensajes recibidos.
@@ -53,7 +73,6 @@ def subscribe():
 
     # Inicia la suscripción.
     streaming_pull_pub = subscriber.subscribe(subscription_path, callback=callback)
-    # pdb.set_trace() # Para debuggear en la consola
     print(streaming_pull_pub)
 
     return jsonify({'message': 'Suscripción iniciada'})
